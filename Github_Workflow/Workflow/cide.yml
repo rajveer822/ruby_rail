@@ -1,0 +1,55 @@
+name: CI/CD Pipeline for Rails Legal App
+
+on:
+  push:
+    branches: [ main, production ]  # Trigger on commits to main or production
+  pull_request:
+    branches: [ production ]  # Optional: Test PRs targeting production
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'  # Match your Rails version
+      - name: Install dependencies
+        run: bundle install
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install Node dependencies
+        run: npm install
+      - name: Run unit tests
+        run: node cicd-pipeline.js test
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/production' && github.event_name == 'push'  # Only on merge to production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Docker
+        run: docker --version
+      - name: Set up kubectl
+        uses: azure/k8s-set-context@v2
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}  # Store kubeconfig in GitHub secrets
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install Node dependencies
+        run: npm install
+      - name: Deploy
+        env:
+          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          K8S_NAMESPACE: ${{ secrets.K8S_NAMESPACE }}
+        run: node cicd-pipeline.js deploy
